@@ -1,5 +1,5 @@
 export interface IAptosProviderConfig {
-  isTrust?: boolean;
+  isFlowWallet?: boolean;
   network?: string;
   chainId?: string | null;
 }

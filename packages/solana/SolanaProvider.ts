@@ -34,9 +34,7 @@ export class SolanaProvider extends BaseProvider implements ISolanaProvider {
 
   publicKey!: PublicKey | null;
 
-  isTrust: boolean = true;
-
-  isTrustWallet: boolean = true;
+  isFlowWallet: boolean = true;
 
   #useLegacySign = false;
 
@@ -79,9 +77,8 @@ export class SolanaProvider extends BaseProvider implements ISolanaProvider {
         this.#useLegacySign = config.useLegacySign;
       }
 
-      if (typeof config.isTrust !== 'undefined') {
-        this.isTrust = config.isTrust;
-        this.isTrustWallet = config.isTrust;
+      if (typeof config.isFlowWallet !== 'undefined') {
+        this.isFlowWallet = config.isFlowWallet;
       }
     }
 

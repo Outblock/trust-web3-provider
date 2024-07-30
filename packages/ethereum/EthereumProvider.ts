@@ -29,9 +29,7 @@ export class EthereumProvider
 
   #rpc!: RPCServer;
 
-  isTrust: boolean = true;
-
-  isTrustWallet: boolean = true;
+  isFlowWallet: boolean = true;
 
   providers: object[] | undefined;
 
@@ -56,9 +54,8 @@ export class EthereumProvider
         this.#disableMobileAdapter = config.disableMobileAdapter;
       }
 
-      if (typeof config.isTrust !== 'undefined') {
-        this.isTrust = config.isTrust;
-        this.isTrustWallet = config.isTrust;
+      if (typeof config.isFlowWallet !== 'undefined') {
+        this.isFlowWallet = config.isFlowWallet;
       }
 
       this.#rpc = new RPCServer(this.#rpcUrl);

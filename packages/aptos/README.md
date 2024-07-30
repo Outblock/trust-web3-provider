@@ -17,7 +17,7 @@
 
 ```typescript
 const config: {
-  isTrust?: boolean;
+  isFlowWallet?: boolean;
   network?: string;
   chainId?: string | null;
 } = {};

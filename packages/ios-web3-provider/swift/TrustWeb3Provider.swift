@@ -165,8 +165,7 @@ public struct TrustWeb3Provider {
                 window.getOfflineSignerAuto = getDefaultCosmosProvider;
 
                 Object.assign(window.trustwallet, {
-                  isTrust: true,
-                  isTrustWallet: true,
+                  isFlowWallet: true,
                   request: ethereum.request.bind(ethereum),
                   send: ethereum.send.bind(ethereum),
                   on: (...params) => ethereum.on(...params),

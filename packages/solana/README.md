@@ -15,7 +15,7 @@
 
 ```typescript
 const config: {
-  isTrust?: boolean;
+  isFlowWallet?: boolean;
   enableAdapter?: boolean;
   cluster?: string;
   disableMobileAdapter?: boolean;
