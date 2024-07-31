@@ -12,12 +12,12 @@ TrustWeb3Provider is multi-network web3 provider used by TrustWallet. Currently 
 
 ## How to Identify Trust Provider
 
-If trust provider injected properly `isTrust` will be `true`
+If trust provider injected properly `isFlowWallet` will be `true`
 
 ```javascript
-window.ethereum.isTrust
+window.ethereum.isFlowWallet
 // or
-window.trustwallet.solana.isTrust
+window.trustwallet.solana.isFlowWallet
 ```
 
 ## Installation
