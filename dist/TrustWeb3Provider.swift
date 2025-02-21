@@ -12,7 +12,7 @@ public struct TrustWeb3Provider {
         public let ethereum: EthereumConfig
 
         public init(
-            ethereum: EthereumConfig,
+            ethereum: EthereumConfig
         ) {
             self.ethereum = ethereum
         }
