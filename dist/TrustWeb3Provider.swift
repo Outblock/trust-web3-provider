@@ -10,11 +10,14 @@ import WebKit
 public struct TrustWeb3Provider {
     public struct Config: Equatable {
         public let ethereum: EthereumConfig
+        public let isDebug: Bool
 
         public init(
-            ethereum: EthereumConfig
+            ethereum: EthereumConfig,
+            isDebug: Bool = false
         ) {
             self.ethereum = ethereum
+            self.isDebug = isDebug
         }
 
         public struct EthereumConfig: Equatable {
@@ -59,7 +62,8 @@ public struct TrustWeb3Provider {
                     address: "\(config.ethereum.address)",
                     chainId: \(config.ethereum.chainId),
                     rpcUrl: "\(config.ethereum.rpcUrl)"
-                }
+                },
+                isDebug: "\(config.isDebug)"
             };
 
             trustwallet.ethereum = new trustwallet.Provider(config);
