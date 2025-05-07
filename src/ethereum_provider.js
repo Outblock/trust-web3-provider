@@ -11,7 +11,8 @@ import ProviderRpcError from "./error";
 import Utils from "./utils";
 import IdMapping from "./id_mapping";
 import isUtf8 from "isutf8";
-import { TypedDataUtils, SignTypedDataVersion } from "@metamask/eth-sig-util";
+import { SignTypedDataVersion } from "@metamask/eth-sig-util";
+import { hashTypedData } from "viem";
 import BaseProvider from "./base_provider";
 
 class TrustWeb3Provider extends BaseProvider {
@@ -321,13 +322,15 @@ class TrustWeb3Provider extends BaseProvider {
       );
     }
 
+    console.log("use viem hashTypedData");
+
     const hash =
       version !== SignTypedDataVersion.V1
-        ? TypedDataUtils.eip712Hash(message, version)
+        ? hashTypedData(message)
         : "";
 
     this.postMessage("signTypedMessage", payload.id, {
-      data: "0x" + hash.toString("hex"),
+      data: hash,
       raw: typeof data === "string" ? data : JSON.stringify(data),
       address,
       version,
