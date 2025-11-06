@@ -89,6 +89,70 @@ class DAppWebViewController: UIViewController {
         return webview
     }()
 
+    // MARK: - Native methods to trigger provider changes
+    
+    /**
+     * Switch account from native side
+     * @param address: New address to switch to
+     * @param chainId: Optional chain ID to switch to as well
+     * @param network: Network name (default "ethereum")
+     */
+    func nativeSwitchAccount(_ address: String, chainId: Int? = nil, network: String = "ethereum") {
+        let id = Int64(Date().timeIntervalSince1970 * 1000) // Use timestamp as ID
+        let chainIdParam = chainId != nil ? "\"\(chainId!)\"" : "null"
+        
+        let jsCommand = """
+            window.trustwallet.postMessage({
+                id: \(id),
+                name: "changeAccount",
+                object: {
+                    address: "\(address)",
+                    chainId: \(chainIdParam)
+                },
+                network: "\(network)"
+            });
+        """
+        
+        webview.evaluateJavaScript(jsCommand) { result, error in
+            if let error = error {
+                print("Native switch account error: \(error)")
+            } else {
+                print("Native switch account executed successfully")
+            }
+        }
+    }
+    
+    /**
+     * Switch chain from native side
+     * @param chainId: Chain ID to switch to
+     * @param rpcUrl: Optional RPC URL
+     * @param network: Network name (default "ethereum")
+     */
+    func nativeSwitchChain(_ chainId: Int, rpcUrl: String? = nil, network: String = "ethereum") {
+        let id = Int64(Date().timeIntervalSince1970 * 1000) // Use timestamp as ID
+        let rpcUrlParam = rpcUrl != nil ? "\"\(rpcUrl!)\"" : "null"
+        
+        let jsCommand = """
+            window.trustwallet.postMessage({
+                id: \(id),
+                name: "changeChainId",
+                object: {
+                    chainId: "\(chainId)",
+                    rpcUrl: \(rpcUrlParam)
+                },
+                network: "\(network)"
+            });
+        """
+        
+        webview.evaluateJavaScript(jsCommand) { result, error in
+            if let error = error {
+                print("Native switch chain error: \(error)")
+            } else {
+                print("Native switch chain executed successfully")
+            }
+        }
+    }
+
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
 
@@ -584,6 +648,7 @@ extension DAppWebViewController: WKScriptMessageHandler {
         present(alert, animated: true, completion: nil)
     }
 
+
     private func extractMethod(json: [String: Any]) -> DAppMethod? {
         guard
             let name = json["name"] as? String
@@ -668,6 +733,7 @@ extension DAppWebViewController: WKScriptMessageHandler {
         }
         return raw
     }
+
 
     private func extractMode(json: [String: Any]) -> String? {
         guard

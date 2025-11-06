@@ -25,6 +25,10 @@ class TrustWeb3Provider extends BaseProvider {
     this.wrapResults = new Map();
     this.isMetaMask = !!config.ethereum.isMetaMask;
 
+    // Domain authorization management
+    this.domainAuthorizations = new Map(); // domain -> Set<address>
+    this.loadDomainAuthorizations();
+
     this.emitConnect(this.chainId);
   }
 
@@ -187,6 +191,8 @@ class TrustWeb3Provider extends BaseProvider {
           return this.wallet_addEthereumChain(payload);
         case "wallet_switchEthereumChain":
           return this.wallet_switchEthereumChain(payload);
+        case "wallet_revokePermissions":
+          return this.wallet_revokePermissions(payload);
         case "eth_newFilter":
         case "eth_newBlockFilter":
         case "eth_newPendingTransactionFilter":
@@ -229,7 +235,17 @@ class TrustWeb3Provider extends BaseProvider {
   }
 
   eth_accounts() {
-    return this.address ? [this.address] : [];
+    if (!this.address) return [];
+    
+    const domain = this.getCurrentDomain();
+    const authorizedAddresses = this.domainAuthorizations.get(domain);
+    
+    // Return accounts if current address is authorized for this domain
+    if (authorizedAddresses && authorizedAddresses.has(this.address.toLowerCase())) {
+      return [this.address];
+    }
+    
+    return [];
   }
 
   eth_coinbase() {
@@ -339,7 +355,9 @@ class TrustWeb3Provider extends BaseProvider {
   }
 
   eth_requestAccounts(payload) {
-    this.postMessage("requestAccounts", payload.id, {});
+    this.postMessage("requestAccounts", payload.id, {
+      domain: this.getCurrentDomain()
+    });
   }
 
   wallet_watchAsset(payload) {
@@ -358,6 +376,40 @@ class TrustWeb3Provider extends BaseProvider {
 
   wallet_switchEthereumChain(payload) {
     this.postMessage("switchEthereumChain", payload.id, payload.params[0]);
+  }
+
+  wallet_revokePermissions(payload) {
+    const domain = this.getCurrentDomain();
+    
+    // Check if params specify what permissions to revoke
+    const params = payload.params && payload.params[0];
+    
+    if (params && params.eth_accounts === false) {
+      // Revoke eth_accounts permission for current domain
+      this.revokeAllPermissionsForDomain(domain);
+      
+      // Emit accountsChanged with empty array to notify dApp
+      this.emit('accountsChanged', []);
+      
+      if (this.isDebug) {
+        console.log(`Revoked eth_accounts permission for domain: ${domain}`);
+      }
+      
+      // Return success response
+      return this.sendResponse(payload.id, null);
+    } else {
+      // If no specific permissions specified, revoke all permissions for domain
+      this.revokeAllPermissionsForDomain(domain);
+      
+      // Emit accountsChanged with empty array
+      this.emit('accountsChanged', []);
+      
+      if (this.isDebug) {
+        console.log(`Revoked all permissions for domain: ${domain}`);
+      }
+      
+      return this.sendResponse(payload.id, null);
+    }
   }
 
   /**
@@ -390,6 +442,13 @@ class TrustWeb3Provider extends BaseProvider {
     } else {
       data.result = result;
     }
+    
+    // Handle special cases for authorization
+    if (Array.isArray(result) && result.length > 0 && result[0].startsWith('0x')) {
+      // This looks like an accounts array result, authorize the first address for current domain
+      this.handleAccountRequestSuccess(result[0]);
+    }
+    
     if (this.isDebug) {
       console.log(
         `<== sendResponse id: ${id}, result: ${JSON.stringify(
@@ -412,6 +471,193 @@ class TrustWeb3Provider extends BaseProvider {
         } catch (error) {
           console.log(`send response to frame error: ${error}`);
         }
+      }
+    }
+  }
+
+  // Domain authorization management methods
+  
+  /**
+   * Get current domain
+   */
+  getCurrentDomain() {
+    try {
+      return window.location.origin;
+    } catch (e) {
+      return 'unknown';
+    }
+  }
+
+  /**
+   * Authorize address for a specific domain
+   */
+  authorizeAddressForDomain(address, domain = this.getCurrentDomain()) {
+    if (!this.domainAuthorizations.has(domain)) {
+      this.domainAuthorizations.set(domain, new Set());
+    }
+    this.domainAuthorizations.get(domain).add(address.toLowerCase());
+    this.saveDomainAuthorizations();
+  }
+
+  /**
+   * Remove authorization for address from a specific domain
+   */
+  revokeAddressForDomain(address, domain = this.getCurrentDomain()) {
+    const authorizedAddresses = this.domainAuthorizations.get(domain);
+    if (authorizedAddresses) {
+      authorizedAddresses.delete(address.toLowerCase());
+      if (authorizedAddresses.size === 0) {
+        this.domainAuthorizations.delete(domain);
+      }
+      this.saveDomainAuthorizations();
+    }
+  }
+
+  /**
+   * Remove all permissions/authorizations for a specific domain
+   */
+  revokeAllPermissionsForDomain(domain = this.getCurrentDomain()) {
+    if (this.domainAuthorizations.has(domain)) {
+      this.domainAuthorizations.delete(domain);
+      this.saveDomainAuthorizations();
+      
+      if (this.isDebug) {
+        console.log(`Removed all authorizations for domain: ${domain}`);
+      }
+    }
+  }
+
+  /**
+   * Check if address is authorized for a specific domain
+   */
+  isAddressAuthorizedForDomain(address, domain = this.getCurrentDomain()) {
+    const authorizedAddresses = this.domainAuthorizations.get(domain);
+    return authorizedAddresses && authorizedAddresses.has(address.toLowerCase());
+  }
+
+  /**
+   * Get all authorized addresses for a specific domain
+   */
+  getAuthorizedAddressesForDomain(domain = this.getCurrentDomain()) {
+    const authorizedAddresses = this.domainAuthorizations.get(domain);
+    return authorizedAddresses ? Array.from(authorizedAddresses) : [];
+  }
+
+  /**
+   * Save domain authorizations to localStorage
+   */
+  saveDomainAuthorizations() {
+    try {
+      const serializable = {};
+      this.domainAuthorizations.forEach((addresses, domain) => {
+        serializable[domain] = Array.from(addresses);
+      });
+      localStorage.setItem('trustwallet_domain_authorizations', JSON.stringify(serializable));
+    } catch (e) {
+      if (this.isDebug) {
+        console.log('Failed to save domain authorizations:', e);
+      }
+    }
+  }
+
+  /**
+   * Load domain authorizations from localStorage
+   */
+  loadDomainAuthorizations() {
+    try {
+      const saved = localStorage.getItem('trustwallet_domain_authorizations');
+      if (saved) {
+        const data = JSON.parse(saved);
+        Object.entries(data).forEach(([domain, addresses]) => {
+          this.domainAuthorizations.set(domain, new Set(addresses));
+        });
+      }
+    } catch (e) {
+      if (this.isDebug) {
+        console.log('Failed to load domain authorizations:', e);
+      }
+    }
+  }
+
+  // Provider state management methods
+  
+  /**
+   * Switch to a different account/address
+   * @param {string} newAddress - The new address to switch to
+   * @param {boolean} authorizeForCurrentDomain - Whether to automatically authorize the new address for current domain
+   */
+  switchAccount(newAddress, authorizeForCurrentDomain = true) {
+    const oldAddress = this.address;
+    this.setAddress(newAddress);
+    
+    if (authorizeForCurrentDomain && newAddress) {
+      this.authorizeAddressForDomain(newAddress);
+    }
+    
+    // Emit accountsChanged event
+    const accounts = this.eth_accounts();
+    this.emit('accountsChanged', accounts);
+    
+    if (this.isDebug) {
+      console.log(`Account switched from ${oldAddress} to ${newAddress}`);
+    }
+  }
+
+  /**
+   * Switch to a different network/chain
+   * @param {number} chainId - The new chain ID
+   * @param {string} rpcUrl - The new RPC URL
+   */
+  switchNetwork(chainId, rpcUrl) {
+    const oldChainId = this.chainId;
+    const oldNetworkVersion = this.networkVersion;
+    
+    // Update network configuration
+    this.networkVersion = "" + chainId;
+    this.chainId = "0x" + chainId.toString(16);
+    
+    if (rpcUrl) {
+      this.rpc = new RPCServer(rpcUrl);
+    }
+    
+    // Emit chainChanged event
+    this.emitChainChanged(this.chainId);
+    
+    if (this.isDebug) {
+      console.log(`Network switched from ${oldChainId} (${oldNetworkVersion}) to ${this.chainId} (${this.networkVersion})`);
+    }
+  }
+
+  /**
+   * Update provider configuration with new account and network
+   * @param {Object} config - New configuration
+   * @param {string} config.address - New address
+   * @param {number} config.chainId - New chain ID
+   * @param {string} config.rpcUrl - New RPC URL
+   * @param {boolean} authorizeForCurrentDomain - Whether to authorize new address for current domain
+   */
+  updateProviderConfig(config, authorizeForCurrentDomain = true) {
+    const { address, chainId, rpcUrl } = config;
+    
+    if (address !== undefined && address !== this.address) {
+      this.switchAccount(address, authorizeForCurrentDomain);
+    }
+    
+    if (chainId !== undefined && chainId !== parseInt(this.networkVersion)) {
+      this.switchNetwork(chainId, rpcUrl);
+    }
+  }
+
+  /**
+   * Handle successful account request and authorize for domain
+   */
+  handleAccountRequestSuccess(address) {
+    if (address) {
+      // Authorize the address for the current domain
+      this.authorizeAddressForDomain(address);
+      
+      if (this.isDebug) {
+        console.log(`Address ${address} authorized for domain ${this.getCurrentDomain()}`);
       }
     }
   }
