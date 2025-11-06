@@ -238,7 +238,7 @@ class TrustWeb3Provider extends BaseProvider {
     if (!this.address) return [];
     
     // Skip domain authorization check in test environment
-    if (typeof global !== 'undefined' && global.process && global.process.env && global.process.env.NODE_ENV === 'test') {
+    if (typeof global !== "undefined" && global.process && global.process.env && global.process.env.NODE_ENV === "test") {
       return [this.address];
     }
     
@@ -355,7 +355,7 @@ class TrustWeb3Provider extends BaseProvider {
         console.error("Version:", version);
       }
       // For test environment, just return a mock hash
-      if (typeof global !== 'undefined' && global.process && global.process.env && global.process.env.NODE_ENV === 'test') {
+      if (typeof global !== "undefined" && global.process && global.process.env && global.process.env.NODE_ENV === "test") {
         hash = Buffer.from("mock_hash_for_testing_purposes_only", "utf8");
       } else {
         throw error;
@@ -409,7 +409,7 @@ class TrustWeb3Provider extends BaseProvider {
       this.revokeAllPermissionsForDomain(domain);
       
       // Emit accountsChanged with empty array to notify dApp
-      this.emit('accountsChanged', []);
+      this.emit("accountsChanged", []);
       
       if (this.isDebug) {
         console.log(`Revoked eth_accounts permission for domain: ${domain}`);
@@ -422,7 +422,7 @@ class TrustWeb3Provider extends BaseProvider {
       this.revokeAllPermissionsForDomain(domain);
       
       // Emit accountsChanged with empty array
-      this.emit('accountsChanged', []);
+      this.emit("accountsChanged", []);
       
       if (this.isDebug) {
         console.log(`Revoked all permissions for domain: ${domain}`);
@@ -464,7 +464,7 @@ class TrustWeb3Provider extends BaseProvider {
     }
     
     // Handle special cases for authorization
-    if (Array.isArray(result) && result.length > 0 && result[0].startsWith('0x')) {
+    if (Array.isArray(result) && result.length > 0 && result[0].startsWith("0x")) {
       // This looks like an accounts array result, authorize the first address for current domain
       this.handleAccountRequestSuccess(result[0]);
     }
@@ -504,7 +504,7 @@ class TrustWeb3Provider extends BaseProvider {
     try {
       return window.location.origin;
     } catch (e) {
-      return 'unknown';
+      return "unknown";
     }
   }
 
@@ -572,10 +572,10 @@ class TrustWeb3Provider extends BaseProvider {
       this.domainAuthorizations.forEach((addresses, domain) => {
         serializable[domain] = Array.from(addresses);
       });
-      localStorage.setItem('trustwallet_domain_authorizations', JSON.stringify(serializable));
+      localStorage.setItem("trustwallet_domain_authorizations", JSON.stringify(serializable));
     } catch (e) {
       if (this.isDebug) {
-        console.log('Failed to save domain authorizations:', e);
+        console.log("Failed to save domain authorizations:", e);
       }
     }
   }
@@ -585,7 +585,7 @@ class TrustWeb3Provider extends BaseProvider {
    */
   loadDomainAuthorizations() {
     try {
-      const saved = localStorage.getItem('trustwallet_domain_authorizations');
+      const saved = localStorage.getItem("trustwallet_domain_authorizations");
       if (saved) {
         const data = JSON.parse(saved);
         Object.entries(data).forEach(([domain, addresses]) => {
@@ -594,7 +594,7 @@ class TrustWeb3Provider extends BaseProvider {
       }
     } catch (e) {
       if (this.isDebug) {
-        console.log('Failed to load domain authorizations:', e);
+        console.log("Failed to load domain authorizations:", e);
       }
     }
   }
@@ -616,7 +616,7 @@ class TrustWeb3Provider extends BaseProvider {
     
     // Emit accountsChanged event
     const accounts = this.eth_accounts();
-    this.emit('accountsChanged', accounts);
+    this.emit("accountsChanged", accounts);
     
     if (this.isDebug) {
       console.log(`Account switched from ${oldAddress} to ${newAddress}`);
