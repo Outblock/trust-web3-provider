@@ -46,6 +46,9 @@
   "jest": {
     "verbose": true,
     "testEnvironment": "jsdom",
-    "globals": {}
+    "setupFilesAfterEnv": ["<rootDir>/tests/setupTests.js"],
+    "globals": {
+      "NODE_ENV": "test"
+    }
   }
 }
