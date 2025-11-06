@@ -15,41 +15,82 @@ env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
+      - name: Install dependencies and test
+        run: |
+          pnpm install
+          pnpm run build
+          NODE_ENV=test pnpm test
+        working-directory: src
+        env:
+          NODE_ENV: test
+
   npm-release:
     name: NPM Release
     runs-on: ubuntu-latest
+    needs: test
     steps:
-      - uses: actions/checkout@v1
-      - uses: actions/setup-node@v1
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          node-version: "14.x"
+          node-version: "20.x"
           registry-url: "https://registry.npmjs.org"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
+
       - name: Set output
         id: vars
         run: echo "tag=${GITHUB_REF#refs/*/}" >> $GITHUB_OUTPUT
-      - name: npm install, build & publish
+
+      - name: Install, build & publish
         run: |
-          npm install web3
-          npm install
-          npm run build
+          pnpm install
+          pnpm run build
           npm version ${{ github.event.inputs.version || steps.vars.outputs.tag  }}
           npm run publish-npm-package
         working-directory: src
         env:
           NODE_AUTH_TOKEN: ${{secrets.NPM_TOKEN}}
+
   github-release:
     name: GitHub Release
     runs-on: ubuntu-latest
+    needs: test
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: "20.x"
           registry-url: "https://npm.pkg.github.com"
           scope: "@trustwallet"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8
 
       - name: Set output
         id: vars
@@ -58,8 +99,8 @@ jobs:
       - name: Build Project
         working-directory: src
         run: |
-          npm i
-          npm run build
+          pnpm install
+          pnpm run build
           npm version ${{ github.event.inputs.version || steps.vars.outputs.tag  }}
           npm run prepare-publish
 
