@@ -159,6 +159,47 @@ class DAppWebViewController: UIViewController {
         setupSubviews()
         urlField.text = homepage
         navigate(to: homepage)
+        
+        // Example: Demonstrate new native provider control methods
+        demonstrateNativeMethods()
+    }
+    
+    // MARK: - Example Usage of New Native Methods
+    
+    func demonstrateNativeMethods() {
+        // Example 1: Using WKWebView extension methods with completion handlers
+        webview.trustSwitchAccount("0x9d8a62f656a8d1615c1294fd71e9cfb3e4855a4f", chainId: 137) { result in
+            switch result {
+            case .success(let data):
+                print("Account switch success: \(data ?? "nil")")
+            case .failure(let error):
+                print("Account switch error: \(error)")
+            }
+        }
+        
+        webview.trustSwitchChain(137, rpcUrl: "https://polygon-rpc.com") { result in
+            switch result {
+            case .success(let data):
+                print("Chain switch success: \(data ?? "nil")")
+            case .failure(let error):
+                print("Chain switch error: \(error)")
+            }
+        }
+        
+        // Example 2: Just generating JavaScript commands (for custom execution)
+        let accountSwitchJS = webview.generateSwitchAccountJS(address: "0x9d8a62f656a8d1615c1294fd71e9cfb3e4855a4f", chainId: 137)
+        let chainSwitchJS = webview.generateSwitchChainJS(chainId: 137, rpcUrl: "https://polygon-rpc.com")
+        print("Generated account switch JS: \(accountSwitchJS)")
+        print("Generated chain switch JS: \(chainSwitchJS)")
+        
+        // Example 3: Switch to different networks
+        webview.trustSwitchChain(1, rpcUrl: "https://cloudflare-eth.com") { result in
+            print("Ethereum mainnet switch result: \(result)")
+        }
+        
+        webview.trustSwitchChain(56, rpcUrl: "https://bsc-dataseed4.ninicoin.io") { result in
+            print("BSC switch result: \(result)")
+        }
     }
 
     func setupSubviews() {
