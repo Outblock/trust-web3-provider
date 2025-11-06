@@ -3,7 +3,10 @@
     "allow": [
       "Bash(node:*)",
       "Bash(pnpm test:*)",
-      "Bash(NODE_ENV=test pnpm test)"
+      "Bash(NODE_ENV=test pnpm test)",
+      "Bash(pnpm run lint:*)",
+      "Bash(./gradlew:*)",
+      "Bash(java:*)"
     ],
     "deny": [],
     "ask": []

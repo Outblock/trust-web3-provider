@@ -33,6 +33,9 @@ class MainActivity : AppCompatActivity() {
         }
         WebAppInterface(this, webview, DAPP_URL).run {
             webview.addJavascriptInterface(this, "_tw_")
+            
+            // Demonstrate new extension methods
+            demonstrateNativeMethods(webview)
 
             val webViewClient = object : WebViewClient() {
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -82,5 +85,47 @@ class MainActivity : AppCompatActivity() {
         })();
         """
         return  source
+    }
+    
+    /**
+     * Demonstrate usage of new WebView extension methods for Trust Provider
+     */
+    private fun demonstrateNativeMethods(webview: WebView) {
+        // Example 1: Switch account using extension method
+        webview.trustSwitchAccount(
+            address = "0x9d8a62f656a8d1615c1294fd71e9cfb3e4855a4f",
+            chainId = 137,
+            network = "ethereum"
+        ) { result ->
+            println("Account switch result: $result")
+        }
+        
+        // Example 2: Switch chain using extension method
+        webview.trustSwitchChain(
+            chainId = 137,
+            rpcUrl = "https://polygon-rpc.com",
+            network = "ethereum"
+        ) { result ->
+            println("Chain switch result: $result")
+        }
+        
+        // Example 3: Generate JavaScript commands for custom execution
+        val accountSwitchJS = webview.generateSwitchAccountJS(
+            address = "0x9d8a62f656a8d1615c1294fd71e9cfb3e4855a4f", 
+            chainId = 137
+        )
+        val chainSwitchJS = webview.generateSwitchChainJS(chainId = 137, rpcUrl = "https://polygon-rpc.com")
+        
+        println("Generated account switch JS: $accountSwitchJS")
+        println("Generated chain switch JS: $chainSwitchJS")
+        
+        // Example 4: Switch to different networks
+        webview.trustSwitchChain(1, rpcUrl = "https://cloudflare-eth.com") { result ->
+            println("Ethereum mainnet switch result: $result")
+        }
+        
+        webview.trustSwitchChain(56, rpcUrl = "https://bsc-dataseed4.ninicoin.io") { result ->
+            println("BSC switch result: $result")
+        }
     }
 }
