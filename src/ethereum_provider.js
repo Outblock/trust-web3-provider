@@ -175,6 +175,27 @@ class TrustWeb3Provider extends BaseProvider {
       console.log(`==> _request payload ${JSON.stringify(payload)}`);
     }
     this.fillJsonRpcVersion(payload);
+    
+    // Check authorization for signature methods
+    if (this.isSignatureMethod(payload.method)) {
+      const domain = this.getCurrentDomain();
+      const authorizedAddresses = this.domainAuthorizations.get(domain);
+      
+      // Skip authorization check in test environment
+      const isTestEnvironment = typeof global !== "undefined" && global.process && global.process.env && global.process.env.NODE_ENV === "test";
+      
+      if (!isTestEnvironment && (!authorizedAddresses || authorizedAddresses.size === 0)) {
+        const error = new ProviderRpcError(
+          4100, 
+          `Unauthorized: Domain ${domain} has not been granted permission to access accounts. Please connect your wallet first.`
+        );
+        if (this.isDebug) {
+          console.log(`Rejected ${payload.method} for unauthorized domain: ${domain}`);
+        }
+        return Promise.reject(error);
+      }
+    }
+    
     return new Promise((resolve, reject) => {
       if (!payload.id) {
         payload.id = Utils.genId();
@@ -681,6 +702,51 @@ class TrustWeb3Provider extends BaseProvider {
    */
   getCurrentSelectedAddress() {
     return this.address || "";
+  }
+
+  /**
+   * Get the actual connected address for current dApp/domain
+   * This returns the address that eth_accounts() would return
+   * @returns {string} Current connected address for this domain, empty if not connected
+   */
+  getCurrentConnectedAddress() {
+    // Skip domain authorization check in test environment
+    if (typeof global !== "undefined" && global.process && global.process.env && global.process.env.NODE_ENV === "test") {
+      return this.address || "";
+    }
+    
+    const domain = this.getCurrentDomain();
+    const authorizedAddresses = this.domainAuthorizations.get(domain);
+    
+    if (!authorizedAddresses || authorizedAddresses.size === 0) {
+      return "";
+    }
+    
+    // Find the first authorized address from our injected addresses
+    for (const address of this.addresses || []) {
+      if (authorizedAddresses.has(address.toLowerCase())) {
+        return address.toLowerCase();
+      }
+    }
+    
+    return "";
+  }
+
+  /**
+   * Check if the RPC method is a signature method that requires authorization
+   * @param {string} method - The RPC method name
+   * @returns {boolean} True if it's a signature method
+   */
+  isSignatureMethod(method) {
+    const signatureMethods = new Set([
+      'eth_sign',
+      'personal_sign', 
+      'eth_signTypedData',
+      'eth_signTypedData_v3',
+      'eth_signTypedData_v4',
+      'eth_sendTransaction'
+    ]);
+    return signatureMethods.has(method);
   }
 
   /**
