@@ -21,12 +21,23 @@ public struct TrustWeb3Provider {
         }
 
         public struct EthereumConfig: Equatable {
-            public let address: String
+            public let address: String // First address for backwards compatibility
+            public let addresses: [String] // All injected addresses
             public let chainId: Int
             public let rpcUrl: String
-
+            
+            // Backwards compatible initializer
             public init(address: String, chainId: Int, rpcUrl: String) {
                 self.address = address
+                self.addresses = [address]
+                self.chainId = chainId
+                self.rpcUrl = rpcUrl
+            }
+            
+            // New initializer for multiple addresses
+            public init(addresses: [String], chainId: Int, rpcUrl: String) {
+                self.addresses = addresses
+                self.address = addresses.first ?? "" // First address as default
                 self.chainId = chainId
                 self.rpcUrl = rpcUrl
             }
@@ -55,11 +66,13 @@ public struct TrustWeb3Provider {
     }
 
     public var injectScript: WKUserScript {
+        let addressesArray = config.ethereum.addresses.map { "\"\($0)\"" }.joined(separator: ", ")
         let source = """
         (function() {
             var config = {
                 ethereum: {
                     address: "\(config.ethereum.address)",
+                    addresses: [\(addressesArray)],
                     chainId: \(config.ethereum.chainId),
                     rpcUrl: "\(config.ethereum.rpcUrl)"
                 },
