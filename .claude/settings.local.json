@@ -6,7 +6,8 @@
       "Bash(NODE_ENV=test pnpm test)",
       "Bash(pnpm run lint:*)",
       "Bash(./gradlew:*)",
-      "Bash(java:*)"
+      "Bash(java:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []

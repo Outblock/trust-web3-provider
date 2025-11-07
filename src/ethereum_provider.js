@@ -29,19 +29,40 @@ class TrustWeb3Provider extends BaseProvider {
     this.domainAuthorizations = new Map(); // domain -> Set<address>
     this.loadDomainAuthorizations();
 
+    // Ethereum address regex pattern: 0x followed by 40 hex characters
+    this.ethereumAddressRegex = /^0x[a-fA-F0-9]{40}$/;
+
     this.emitConnect(this.chainId);
   }
 
   setAddress(address) {
-    const lowerAddress = (address || "").toLowerCase();
-    this.address = lowerAddress;
-    this.ready = !!address;
+    // Backwards compatibility: convert single address to array
+    if (typeof address === 'string') {
+      this.setAddresses([address]);
+    } else if (Array.isArray(address)) {
+      this.setAddresses(address);
+    } else {
+      this.setAddresses([]);
+    }
+  }
+
+  setAddresses(addresses) {
+    // Normalize all addresses to lowercase
+    const normalizedAddresses = (addresses || [])
+      .filter(addr => addr && typeof addr === 'string')
+      .map(addr => addr.toLowerCase());
+    
+    this.addresses = normalizedAddresses;
+    this.address = normalizedAddresses[0] || ""; // Keep first address for backwards compatibility
+    this.ready = normalizedAddresses.length > 0;
+    
     try {
       for (var i = 0; i < window.frames.length; i++) {
         const frame = window.frames[i];
         if (frame.ethereum && frame.ethereum.isTrust) {
-          frame.ethereum.address = lowerAddress;
-          frame.ethereum.ready = !!address;
+          frame.ethereum.addresses = normalizedAddresses;
+          frame.ethereum.address = this.address; // Backwards compatibility
+          frame.ethereum.ready = this.ready;
         }
       }
     } catch (error) {
@@ -50,7 +71,14 @@ class TrustWeb3Provider extends BaseProvider {
   }
 
   setConfig(config) {
-    this.setAddress(config.ethereum.address);
+    // Support both single address and multiple addresses
+    if (config.ethereum.addresses && Array.isArray(config.ethereum.addresses)) {
+      this.setAddresses(config.ethereum.addresses);
+    } else if (config.ethereum.address) {
+      this.setAddress(config.ethereum.address);
+    } else {
+      this.setAddresses([]);
+    }
 
     this.networkVersion = "" + config.ethereum.chainId;
     this.chainId = "0x" + (config.ethereum.chainId || 1).toString(16);
@@ -235,19 +263,48 @@ class TrustWeb3Provider extends BaseProvider {
   }
 
   eth_accounts() {
-    if (!this.address) return [];
+    if (!this.addresses || this.addresses.length === 0) return [];
     
     // Skip domain authorization check in test environment
     if (typeof global !== "undefined" && global.process && global.process.env && global.process.env.NODE_ENV === "test") {
-      return [this.address];
+      return [this.address]; // Return only the current selected address in test
     }
     
     const domain = this.getCurrentDomain();
     const authorizedAddresses = this.domainAuthorizations.get(domain);
     
-    // Return accounts if current address is authorized for this domain
-    if (authorizedAddresses && authorizedAddresses.has(this.address.toLowerCase())) {
-      return [this.address];
+    if (!authorizedAddresses) {
+      return [];
+    }
+    
+    // Find the first authorized address from our injected addresses
+    for (const address of this.addresses) {
+      if (authorizedAddresses.has(address.toLowerCase())) {
+        // Auto-switch to the authorized address
+        const oldAddress = this.address;
+        this.address = address.toLowerCase();
+        
+        // Update iframe references if address changed
+        if (oldAddress !== this.address) {
+          try {
+            for (var i = 0; i < window.frames.length; i++) {
+              const frame = window.frames[i];
+              if (frame.ethereum && frame.ethereum.isTrust) {
+                frame.ethereum.address = this.address;
+                frame.ethereum.addresses = this.addresses;
+              }
+            }
+          } catch (error) {
+            console.log(error);
+          }
+          
+          if (this.isDebug) {
+            console.log(`Auto-switched from ${oldAddress} to ${this.address} for domain ${domain}`);
+          }
+        }
+        
+        return [this.address];
+      }
     }
     
     return [];
@@ -464,7 +521,7 @@ class TrustWeb3Provider extends BaseProvider {
     }
     
     // Handle special cases for authorization
-    if (Array.isArray(result) && result.length > 0 && result[0].startsWith("0x")) {
+    if (Array.isArray(result) && result.length > 0 && this.isValidEthereumAddress(result[0])) {
       // This looks like an accounts array result, authorize the first address for current domain
       this.handleAccountRequestSuccess(result[0]);
     }
@@ -512,6 +569,13 @@ class TrustWeb3Provider extends BaseProvider {
    * Authorize address for a specific domain
    */
   authorizeAddressForDomain(address, domain = this.getCurrentDomain()) {
+    if (!this.isValidEthereumAddress(address)) {
+      if (this.isDebug) {
+        console.warn(`Invalid Ethereum address for authorization: ${address}`);
+      }
+      return;
+    }
+    
     if (!this.domainAuthorizations.has(domain)) {
       this.domainAuthorizations.set(domain, new Set());
     }
@@ -601,26 +665,32 @@ class TrustWeb3Provider extends BaseProvider {
 
   // Provider state management methods
   
+
   /**
-   * Switch to a different account/address
-   * @param {string} newAddress - The new address to switch to
-   * @param {boolean} authorizeForCurrentDomain - Whether to automatically authorize the new address for current domain
+   * Get all injected addresses (not limited by domain authorization)
+   * This method is for Native side to know what addresses are available
+   * @returns {Array<string>} All injected addresses
    */
-  switchAccount(newAddress, authorizeForCurrentDomain = true) {
-    const oldAddress = this.address;
-    this.setAddress(newAddress);
-    
-    if (authorizeForCurrentDomain && newAddress) {
-      this.authorizeAddressForDomain(newAddress);
-    }
-    
-    // Emit accountsChanged event
-    const accounts = this.eth_accounts();
-    this.emit("accountsChanged", accounts);
-    
-    if (this.isDebug) {
-      console.log(`Account switched from ${oldAddress} to ${newAddress}`);
-    }
+  getAllInjectedAddresses() {
+    return this.addresses || [];
+  }
+
+  /**
+   * Get current selected address
+   * @returns {string} Current selected address
+   */
+  getCurrentSelectedAddress() {
+    return this.address || "";
+  }
+
+  /**
+   * Validate if a string is a valid Ethereum address
+   * @param {string} address - Address to validate
+   * @returns {boolean} True if valid Ethereum address
+   */
+  isValidEthereumAddress(address) {
+    if (typeof address !== 'string') return false;
+    return this.ethereumAddressRegex.test(address);
   }
 
   /**
@@ -657,11 +727,10 @@ class TrustWeb3Provider extends BaseProvider {
    * @param {boolean} authorizeForCurrentDomain - Whether to authorize new address for current domain
    */
   updateProviderConfig(config, authorizeForCurrentDomain = true) {
-    const { address, chainId, rpcUrl } = config;
+    const { chainId, rpcUrl } = config;
     
-    if (address !== undefined && address !== this.address) {
-      this.switchAccount(address, authorizeForCurrentDomain);
-    }
+    // Note: Address switching is no longer supported at runtime
+    // Addresses must be configured at initialization time
     
     if (chainId !== undefined && chainId !== parseInt(this.networkVersion)) {
       this.switchNetwork(chainId, rpcUrl);
@@ -672,13 +741,15 @@ class TrustWeb3Provider extends BaseProvider {
    * Handle successful account request and authorize for domain
    */
   handleAccountRequestSuccess(address) {
-    if (address) {
+    if (address && this.isValidEthereumAddress(address)) {
       // Authorize the address for the current domain
       this.authorizeAddressForDomain(address);
       
       if (this.isDebug) {
         console.log(`Address ${address} authorized for domain ${this.getCurrentDomain()}`);
       }
+    } else if (address && this.isDebug) {
+      console.warn(`Invalid Ethereum address in account request: ${address}`);
     }
   }
 }

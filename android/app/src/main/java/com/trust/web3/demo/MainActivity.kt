@@ -91,41 +91,28 @@ class MainActivity : AppCompatActivity() {
      * Demonstrate usage of new WebView extension methods for Trust Provider
      */
     private fun demonstrateNativeMethods(webview: WebView) {
-        // Example 1: Switch account using extension method
-        webview.trustSwitchAccount(
-            address = "0x9d8a62f656a8d1615c1294fd71e9cfb3e4855a4f",
-            chainId = 137,
-            network = "ethereum"
-        ) { result ->
-            println("Account switch result: $result")
-        }
+        println("=== Trust Provider Multiple Address Demo ===")
+        println("Note: All addresses are injected at initialization, only chain switching supported at runtime")
         
-        // Example 2: Switch chain using extension method
+        // Example 1: Switch to Polygon chain
         webview.trustSwitchChain(
             chainId = 137,
             rpcUrl = "https://polygon-rpc.com",
             network = "ethereum"
         ) { result ->
-            println("Chain switch result: $result")
+            println("✅ Polygon chain switch result: $result")
         }
         
-        // Example 3: Generate JavaScript commands for custom execution
-        val accountSwitchJS = webview.generateSwitchAccountJS(
-            address = "0x9d8a62f656a8d1615c1294fd71e9cfb3e4855a4f", 
-            chainId = 137
-        )
-        val chainSwitchJS = webview.generateSwitchChainJS(chainId = 137, rpcUrl = "https://polygon-rpc.com")
-        
-        println("Generated account switch JS: $accountSwitchJS")
-        println("Generated chain switch JS: $chainSwitchJS")
-        
-        // Example 4: Switch to different networks
+        // Example 2: Switch to Ethereum mainnet
         webview.trustSwitchChain(1, rpcUrl = "https://cloudflare-eth.com") { result ->
-            println("Ethereum mainnet switch result: $result")
+            println("✅ Ethereum mainnet switch result: $result")
         }
         
+        // Example 3: Switch to BSC
         webview.trustSwitchChain(56, rpcUrl = "https://bsc-dataseed4.ninicoin.io") { result ->
-            println("BSC switch result: $result")
+            println("✅ BSC switch result: $result")
         }
+        
+        println("All chain switching is handled via trustSwitchChain method - no need to manually generate JS")
     }
 }
