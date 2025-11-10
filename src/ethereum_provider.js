@@ -179,20 +179,43 @@ class TrustWeb3Provider extends BaseProvider {
     // Check authorization for signature methods
     if (this.isSignatureMethod(payload.method)) {
       const domain = this.getCurrentDomain();
-      const authorizedAddresses = this.domainAuthorizations.get(domain);
       
       // Skip authorization check in test environment
       const isTestEnvironment = typeof global !== "undefined" && global.process && global.process.env && global.process.env.NODE_ENV === "test";
       
-      if (!isTestEnvironment && (!authorizedAddresses || authorizedAddresses.size === 0)) {
-        const error = new ProviderRpcError(
-          4100, 
-          `Unauthorized: Domain ${domain} has not been granted permission to access accounts. Please connect your wallet first.`
-        );
-        if (this.isDebug) {
-          console.log(`Rejected ${payload.method} for unauthorized domain: ${domain}`);
+      if (!isTestEnvironment) {
+        // First check if user has any connected accounts
+        const connectedAccounts = this.eth_accounts();
+        
+        if (!connectedAccounts || connectedAccounts.length === 0) {
+          const error = new ProviderRpcError(
+            4100, 
+            `Unauthorized: Domain ${domain} has not been granted permission to access accounts. Please connect your wallet first.`
+          );
+          if (this.isDebug) {
+            console.error(`❌ Rejected ${payload.method}: no connected accounts`);
+          }
+          return Promise.reject(error);
         }
-        return Promise.reject(error);
+        
+        // For signature methods, check if the specific address being used is authorized
+        const requestedAddress = this.extractAddressFromSignaturePayload(payload);
+        if (requestedAddress) {
+          const isAuthorized = connectedAccounts.some(account => 
+            account.toLowerCase() === requestedAddress.toLowerCase()
+          );
+          
+          if (!isAuthorized) {
+            const error = new ProviderRpcError(
+              4100, 
+              `Unauthorized: Address ${requestedAddress} is not authorized for domain ${domain}. Connected accounts: ${connectedAccounts.join(', ')}`
+            );
+            if (this.isDebug) {
+              console.error(`❌ Rejected ${payload.method}: address ${requestedAddress} not authorized`);
+            }
+            return Promise.reject(error);
+          }
+        }
       }
     }
     
@@ -399,6 +422,7 @@ class TrustWeb3Provider extends BaseProvider {
     let address;
     let data;
 
+
     if (
       typeof payload.params?.[0] === "string" &&
       this.address === payload.params?.[0].toLowerCase()
@@ -414,10 +438,15 @@ class TrustWeb3Provider extends BaseProvider {
 
     const { chainId } = message.domain || {};
 
+
     if (!chainId || Number(chainId) !== Number(this.chainId)) {
-      throw new Error(
-        "Provided chainId does not match the currently active chain"
+      const error = new Error(
+        `Provided chainId (${chainId}) does not match the currently active chain (${this.chainId})`
       );
+      if (this.isDebug) {
+        console.error(`❌ chainId mismatch: ${chainId} !== ${this.chainId}`);
+      }
+      throw error;
     }
 
     let hash;
@@ -718,6 +747,7 @@ class TrustWeb3Provider extends BaseProvider {
     const domain = this.getCurrentDomain();
     const authorizedAddresses = this.domainAuthorizations.get(domain);
     
+    
     if (!authorizedAddresses || authorizedAddresses.size === 0) {
       return "";
     }
@@ -728,6 +758,7 @@ class TrustWeb3Provider extends BaseProvider {
         return address.toLowerCase();
       }
     }
+    
     
     return "";
   }
@@ -747,6 +778,53 @@ class TrustWeb3Provider extends BaseProvider {
       'eth_sendTransaction'
     ]);
     return signatureMethods.has(method);
+  }
+
+  /**
+   * Extract the address from signature method payload
+   * @param {Object} payload - The RPC payload
+   * @returns {string|null} The address to be used for signing, or null if not found
+   */
+  extractAddressFromSignaturePayload(payload) {
+    const { method, params } = payload;
+    
+    if (!params || params.length === 0) {
+      return null;
+    }
+
+    switch (method) {
+      case 'eth_sign':
+        // eth_sign(address, message)
+        return params[0];
+        
+      case 'personal_sign':
+        // personal_sign can be (message, address) or (address, message)
+        // Check if first param looks like an address
+        if (typeof params[0] === "string" && this.isValidEthereumAddress(params[0])) {
+          return params[0];
+        }
+        // Otherwise address is second param
+        return params[1];
+        
+      case 'eth_signTypedData':
+      case 'eth_signTypedData_v1':
+      case 'eth_signTypedData_v3':
+      case 'eth_signTypedData_v4':
+        // signTypedData can be (address, typedData) or (typedData, address)
+        // Check if first param looks like an address
+        if (typeof params[0] === "string" && this.isValidEthereumAddress(params[0])) {
+          return params[0];
+        }
+        // Otherwise address is second param
+        return params[1];
+        
+      case 'eth_sendTransaction':
+        // eth_sendTransaction([{from: address, ...}])
+        return params[0]?.from;
+        
+      default:
+        return null;
+    }
   }
 
   /**
