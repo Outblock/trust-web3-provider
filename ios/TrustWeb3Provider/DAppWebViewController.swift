@@ -35,34 +35,41 @@ class DAppWebViewController: UIViewController {
         return result
     }()
 
+    // Multiple addresses for injection - each address represents a different wallet/account
+    static let multipleAddresses = [
+        "0x9d8a62f656a8d1615c1294fd71e9cfb3e4855a4f", // Main wallet
+        "0x742d35Cc6634C0532925a3b8BC09e29bA1E09321", // Secondary wallet  
+        "0x8ba1f109551bD432803012645Hac136c9d0d6928"  // Third wallet
+    ]
+    
     static var ethereumConfigs = [
         TrustWeb3Provider.Config.EthereumConfig(
-            address: "0x9d8a62f656a8d1615c1294fd71e9cfb3e4855a4f",
+            addresses: multipleAddresses, // Inject all addresses
             chainId: 1,
             rpcUrl: "https://cloudflare-eth.com"
         ),
         TrustWeb3Provider.Config.EthereumConfig(
-            address: "0x9d8a62f656a8d1615c1294fd71e9cfb3e4855a4f",
+            addresses: multipleAddresses,
             chainId: 10,
             rpcUrl: "https://mainnet.optimism.io"
         ),
         TrustWeb3Provider.Config.EthereumConfig(
-            address: "0x9d8a62f656a8d1615c1294fd71e9cfb3e4855a4f",
+            addresses: multipleAddresses,
             chainId: 56,
             rpcUrl: "https://bsc-dataseed4.ninicoin.io"
         ),
         TrustWeb3Provider.Config.EthereumConfig(
-            address: "0x9d8a62f656a8d1615c1294fd71e9cfb3e4855a4f",
+            addresses: multipleAddresses,
             chainId: 137,
             rpcUrl: "https://polygon-rpc.com"
         ),
         TrustWeb3Provider.Config.EthereumConfig(
-            address: "0x9d8a62f656a8d1615c1294fd71e9cfb3e4855a4f",
+            addresses: multipleAddresses,
             chainId: 250,
             rpcUrl: "https://rpc.ftm.tools"
         ),
         TrustWeb3Provider.Config.EthereumConfig(
-            address: "0x9d8a62f656a8d1615c1294fd71e9cfb3e4855a4f",
+            addresses: multipleAddresses,
             chainId: 42161,
             rpcUrl: "https://arb1.arbitrum.io/rpc"
         )
@@ -89,12 +96,119 @@ class DAppWebViewController: UIViewController {
         return webview
     }()
 
+    // MARK: - Native methods to trigger provider changes
+    
+    /**
+     * Switch account from native side
+     * @param address: New address to switch to
+     * @param chainId: Optional chain ID to switch to as well
+     * @param network: Network name (default "ethereum")
+     */
+    func nativeSwitchAccount(_ address: String, chainId: Int? = nil, network: String = "ethereum") {
+        let id = Int64(Date().timeIntervalSince1970 * 1000) // Use timestamp as ID
+        let chainIdParam = chainId != nil ? "\"\(chainId!)\"" : "null"
+        
+        let jsCommand = """
+            window.trustwallet.postMessage({
+                id: \(id),
+                name: "changeAccount",
+                object: {
+                    address: "\(address)",
+                    chainId: \(chainIdParam)
+                },
+                network: "\(network)"
+            });
+        """
+        
+        webview.evaluateJavaScript(jsCommand) { result, error in
+            if let error = error {
+                print("Native switch account error: \(error)")
+            } else {
+                print("Native switch account executed successfully")
+            }
+        }
+    }
+    
+    /**
+     * Switch chain from native side
+     * @param chainId: Chain ID to switch to
+     * @param rpcUrl: Optional RPC URL
+     * @param network: Network name (default "ethereum")
+     */
+    func nativeSwitchChain(_ chainId: Int, rpcUrl: String? = nil, network: String = "ethereum") {
+        let id = Int64(Date().timeIntervalSince1970 * 1000) // Use timestamp as ID
+        let rpcUrlParam = rpcUrl != nil ? "\"\(rpcUrl!)\"" : "null"
+        
+        let jsCommand = """
+            window.trustwallet.postMessage({
+                id: \(id),
+                name: "changeChainId",
+                object: {
+                    chainId: "\(chainId)",
+                    rpcUrl: \(rpcUrlParam)
+                },
+                network: "\(network)"
+            });
+        """
+        
+        webview.evaluateJavaScript(jsCommand) { result, error in
+            if let error = error {
+                print("Native switch chain error: \(error)")
+            } else {
+                print("Native switch chain executed successfully")
+            }
+        }
+    }
+
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
 
         setupSubviews()
         urlField.text = homepage
         navigate(to: homepage)
+        
+        // Example: Demonstrate new native provider control methods
+        demonstrateNativeMethods()
+    }
+    
+    // MARK: - Example Usage of New Native Methods
+    
+    func demonstrateNativeMethods() {
+        print("=== Trust Provider Multiple Address Demo ===")
+        print("Available addresses: \(Self.multipleAddresses)")
+        print("Note: All addresses are injected, but only one address is active per domain connection")
+        
+        // Example 1: Chain switching between different networks
+        webview.trustSwitchChain(137, rpcUrl: "https://polygon-rpc.com") { result in
+            switch result {
+            case .success(let data):
+                print("✅ Chain switch to Polygon success")
+            case .failure(let error):
+                print("❌ Chain switch error: \(error)")
+            }
+        }
+        
+        // Example 2: Switch to Ethereum mainnet
+        webview.trustSwitchChain(1, rpcUrl: "https://cloudflare-eth.com") { result in
+            switch result {
+            case .success(let data):
+                print("✅ Chain switch to Ethereum mainnet success")
+            case .failure(let error):
+                print("❌ Ethereum mainnet switch error: \(error)")
+            }
+        }
+        
+        // Example 3: Switch to BSC
+        webview.trustSwitchChain(56, rpcUrl: "https://bsc-dataseed4.ninicoin.io") { result in
+            switch result {
+            case .success(let data):
+                print("✅ Chain switch to BSC success")
+            case .failure(let error):
+                print("❌ BSC switch error: \(error)")
+            }
+        }
+        
+        print("All chain switching is handled via trustSwitchChain method - no need to manually generate JS")
     }
 
     func setupSubviews() {
@@ -162,36 +276,6 @@ extension DAppWebViewController: WKScriptMessageHandler {
             handleRequestAccounts(network: network, id: id)
         case .signTransaction:
             switch network {
-            case .cosmos:
-                let input: CosmosSigningInput
-                if let params = json["object"] as? [String: Any] {
-                    input = self.cosmosSigningInputAmino(params: params)!
-                } else {
-                    fatalError("data is missing")
-                }
-                handleSignTransaction(network: network, id: id) { [weak webview] in
-                    let output: CosmosSigningOutput = AnySigner.sign(input: input, coin: self.cosmosCoin)
-                    guard let signature = self.cosmosSignature(from: input, output) else { return }
-                    webview?.tw.send(network: network, result: signature, to: id)
-                }
-            case .aptos:
-                if var params = extractAptosParams(json: json) {
-                    aptosSigningInput(params: params) { [weak self, webview] input in
-                        switch input {
-                        case .failure(let error):
-                            print(error.localizedDescription)
-                        case .success(let input):
-                            self?.handleSignTransaction(network: network, id: id) { [weak webview] in
-                                let output: AptosSigningOutput = AnySigner.sign(input: input, coin: .aptos)
-                                let signature = try! JSONSerialization.jsonObject(with: output.json.data(using: .utf8)!) as! [String: Any]
-                                params["signature"] = signature
-
-                                let data = try! JSONSerialization.data(withJSONObject: params, options: [.withoutEscapingSlashes])
-                                webview?.tw.send(network: network, result: data.hexString, to: id)
-                            }
-                        }
-                    }
-                }
             default: break
             }
 
@@ -230,10 +314,6 @@ extension DAppWebViewController: WKScriptMessageHandler {
             switch network {
             case .ethereum:
                 handleSignMessage(id: id, data: data, addPrefix: false)
-            case .solana, .aptos:
-                handleSignMessage(id: id, network: network, data: data)
-            case .cosmos:
-                handleCosmosSignMessage(id: id, data: data)
             }
         case .signPersonalMessage:
             guard let data = extractMessage(json: json) else {
@@ -252,19 +332,6 @@ extension DAppWebViewController: WKScriptMessageHandler {
             handleSignTypedMessage(id: id, data: data, raw: raw)
         case .sendTransaction:
             switch network {
-            case .cosmos:
-                guard
-                    let mode = extractMode(json: json),
-                    let raw = extractRaw(json: json)
-                else {
-                    print("mode or raw json is missing")
-                    return
-                }
-                handleCosmosSendTransaction(id, mode, raw)
-            case .aptos:
-                guard let object = json["object"] as? [String: Any], let tx = object["tx"] as? [String: Any] else {
-                    return
-                }
                 handleAptosSendTransaction(tx, id: id)
             default:
                 break
@@ -331,25 +398,6 @@ extension DAppWebViewController: WKScriptMessageHandler {
                 let address = self.current.config.ethereum.address
                 webview?.tw.set(network: network.rawValue, address: address)
                 webview?.tw.send(network: network, results: [address], to: id)
-            case .solana:
-                let address = "H4JcMPicKkHcxxDjkyyrLoQj7Kcibd9t815ak4UvTr9M"
-                webview?.tw.send(network: network, results: [address], to: id)
-            case .cosmos:
-                let pubKey = Self.wallet.getKeyForCoin(coin: self.cosmosCoin).getPublicKeySecp256k1(compressed: true).description
-                let address = Self.wallet.getAddressForCoin(coin: self.cosmosCoin)
-                let json = try! JSONSerialization.data(
-                    withJSONObject: ["pubKey": pubKey, "address": address]
-                )
-                let jsonString = String(data: json, encoding: .utf8)!
-                webview?.tw.send(network: network, result: jsonString, to: id)
-            case .aptos:
-                let pubKey = Self.wallet.getKeyForCoin(coin: .aptos).getPublicKeySecp256k1(compressed: true).description
-                let address = Self.wallet.getAddressForCoin(coin: .aptos)
-                let json = try! JSONSerialization.data(
-                    withJSONObject: ["publicKey": pubKey, "address": address]
-                )
-                let jsonString = String(data: json, encoding: .utf8)!
-                webview?.tw.send(network: network, result: jsonString, to: id)
             }
 
         }))
@@ -584,6 +632,7 @@ extension DAppWebViewController: WKScriptMessageHandler {
         present(alert, animated: true, completion: nil)
     }
 
+
     private func extractMethod(json: [String: Any]) -> DAppMethod? {
         guard
             let name = json["name"] as? String
@@ -668,6 +717,7 @@ extension DAppWebViewController: WKScriptMessageHandler {
         }
         return raw
     }
+
 
     private func extractMode(json: [String: Any]) -> String? {
         guard

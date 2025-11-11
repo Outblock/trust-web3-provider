@@ -89,6 +89,7 @@ class WebAppInterface(
         return param.getString("raw")
     }
 
+
     private fun handleSignMessage(id: Long, data: ByteArray, addPrefix: Boolean) {
         context.materialAlertDialog {
             title = "Sign Ethereum Message"
@@ -149,6 +150,66 @@ class WebAppInterface(
     private fun signSolanaMessage(message: ByteArray): String {
         val signature = privateKey.sign(message, Curve.ED25519)
         return Numeric.toHexString(signature)
-
     }
+
+    // MARK: - Native methods to trigger provider changes
+    
+    /**
+     * Switch account from native side
+     * @param address: New address to switch to
+     * @param chainId: Optional chain ID to switch to as well
+     * @param network: Network name (default "ethereum")
+     */
+    fun nativeSwitchAccount(address: String, chainId: Int? = null, network: String = "ethereum") {
+        val id = System.currentTimeMillis() // Use timestamp as ID
+        val chainIdParam = if (chainId != null) "\"$chainId\"" else "null"
+        
+        val jsCommand = """
+            window.trustwallet.postMessage({
+                id: $id,
+                name: "changeAccount",
+                object: {
+                    address: "$address",
+                    chainId: $chainIdParam
+                },
+                network: "$network"
+            });
+        """.trimIndent()
+        
+        webView.post {
+            webView.evaluateJavascript(jsCommand) { result ->
+                println("Native switch account executed: $result")
+            }
+        }
+    }
+    
+    /**
+     * Switch chain from native side
+     * @param chainId: Chain ID to switch to
+     * @param rpcUrl: Optional RPC URL
+     * @param network: Network name (default "ethereum")
+     */
+    fun nativeSwitchChain(chainId: Int, rpcUrl: String? = null, network: String = "ethereum") {
+        val id = System.currentTimeMillis() // Use timestamp as ID
+        val rpcUrlParam = if (rpcUrl != null) "\"$rpcUrl\"" else "null"
+        
+        val jsCommand = """
+            window.trustwallet.postMessage({
+                id: $id,
+                name: "changeChainId",
+                object: {
+                    chainId: "$chainId",
+                    rpcUrl: $rpcUrlParam
+                },
+                network: "$network"
+            });
+        """.trimIndent()
+        
+        webView.post {
+            webView.evaluateJavascript(jsCommand) { result ->
+                println("Native switch chain executed: $result")
+            }
+        }
+    }
+
 }

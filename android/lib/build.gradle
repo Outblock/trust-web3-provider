@@ -1,8 +1,8 @@
 apply plugin: 'com.android.library'
-apply plugin: 'com.github.dcendents.android-maven'
 apply plugin: 'maven-publish'
+apply plugin: 'kotlin-android'
 
-group='com.trustwallet'
+group = 'io.outblock'
 
 def getArtificatId = { ->
     return "web3-provider"
@@ -12,44 +12,118 @@ def getVersionName = { ->
 }
 
 android {
-    compileSdkVersion 28
+    compileSdkVersion 33
 
     defaultConfig {
         minSdkVersion 23
-        targetSdkVersion 28
+        targetSdkVersion 33
         versionCode 1
         project.archivesBaseName = getArtificatId()
         versionName getVersionName()
+
+        consumerProguardFiles "consumer-rules.pro"
     }
 
     buildTypes {
         release {
             minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = '1.8'
+    }
+
+    lint {
+        abortOnError false
+        checkReleaseBuilds false
+    }
+
+    publishing {
+        singleVariant("release") {
+            withSourcesJar()
+            withJavadocJar()
+        }
+    }
 }
 
-dependencies {}
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
+    implementation 'androidx.core:core-ktx:1.8.0'
+}
 
-publishing {
-    publications {
-        web3provider(MavenPublication) {
-            groupId group
-            artifactId getArtificatId()
-            version getVersionName()
-            artifact("$buildDir/outputs/aar/${getArtificatId()}-release.aar")
+afterEvaluate {
+    publishing {
+        publications {
+            release(MavenPublication) {
+                from components.release
+                
+                groupId = group
+                artifactId = getArtificatId()
+                version = getVersionName()
+
+                pom {
+                    name = 'Outblock Web3 Provider'
+                    description = 'Web3 javascript wrapper provider for Android platforms. The magic behind the dApps browsers'
+                    url = 'https://github.com/Outblock/trust-web3-provider'
+                    
+                    licenses {
+                        license {
+                            name = 'MIT License'
+                            url = 'https://opensource.org/licenses/MIT'
+                        }
+                    }
+                    
+                    developers {
+                        developer {
+                            id = 'outblock'
+                            name = 'Outblock'
+                            email = 'developer@outblock.io'
+                        }
+                    }
+                    
+                    scm {
+                        connection = 'scm:git:git://github.com/Outblock/trust-web3-provider.git'
+                        developerConnection = 'scm:git:ssh://github.com:Outblock/trust-web3-provider.git'
+                        url = 'https://github.com/Outblock/trust-web3-provider/tree/main'
+                    }
+                }
+            }
         }
-    }
 
-    repositories {
-        maven {
-            name = "GitHubPackages"
-            url = uri("https://maven.pkg.github.com/trustwallet/trust-web3-provider")
-            credentials {
-                username = System.getenv("GPR_USER")
-                password = System.getenv("GPR_API_KEY")
+        repositories {
+            // GitHub Packages
+            maven {
+                name = "GitHubPackages"
+                url = uri("https://maven.pkg.github.com/Outblock/trust-web3-provider")
+                credentials {
+                    username = System.getenv("GPR_USER")
+                    password = System.getenv("GPR_API_KEY")
+                }
+            }
+            
+            // Local repository for testing
+            maven {
+                name = "LocalRepo"
+                url = uri("$buildDir/repo")
+            }
+            
+            // Maven Central (if credentials are provided)
+            if (System.getenv("SONATYPE_USERNAME") && System.getenv("SONATYPE_PASSWORD")) {
+                maven {
+                    name = "OSSRH"
+                    url = uri("https://s01.oss.sonatype.org/service/local/staging/deploy/maven2/")
+                    credentials {
+                        username = System.getenv("SONATYPE_USERNAME")
+                        password = System.getenv("SONATYPE_PASSWORD")
+                    }
+                }
             }
         }
     }

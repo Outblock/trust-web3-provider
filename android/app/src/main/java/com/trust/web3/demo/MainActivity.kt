@@ -7,6 +7,8 @@ import android.webkit.SslErrorHandler
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.appcompat.app.AppCompatActivity
+import io.outblock.web3.provider.trustSwitchChain
+import io.outblock.web3.provider.trustGetConnectedAddress
 
 class MainActivity : AppCompatActivity() {
     companion object {
@@ -33,6 +35,9 @@ class MainActivity : AppCompatActivity() {
         }
         WebAppInterface(this, webview, DAPP_URL).run {
             webview.addJavascriptInterface(this, "_tw_")
+            
+            // Demonstrate new extension methods
+            demonstrateNativeMethods(webview)
 
             val webViewClient = object : WebViewClient() {
                 override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
@@ -82,5 +87,47 @@ class MainActivity : AppCompatActivity() {
         })();
         """
         return  source
+    }
+    
+    /**
+     * Demonstrate usage of new WebView extension methods for Trust Provider
+     */
+    private fun demonstrateNativeMethods(webview: WebView) {
+        println("=== Trust Provider Multiple Address Demo ===")
+        println("Note: All addresses are injected at initialization, only chain switching supported at runtime")
+        
+        // Example 1: Get current connected address
+        webview.trustGetConnectedAddress { address ->
+            println("🔍 Current connected address: ${if (address.isEmpty()) "Not connected" else address}")
+        }
+        
+        // Example 2: Switch to Polygon chain
+        webview.trustSwitchChain(
+            chainId = 137,
+            rpcUrl = "https://polygon-rpc.com",
+            network = "ethereum"
+        ) { result ->
+            println("✅ Polygon chain switch result: $result")
+            
+            // Check connected address after chain switch
+            webview.trustGetConnectedAddress { address ->
+                println("🔍 Connected address after Polygon switch: ${if (address.isEmpty()) "Not connected" else address}")
+            }
+        }
+        
+        // Example 3: Switch to Ethereum mainnet
+        webview.trustSwitchChain(1, rpcUrl = "https://cloudflare-eth.com") { result ->
+            println("✅ Ethereum mainnet switch result: $result")
+        }
+        
+        // Example 4: Switch to BSC
+        webview.trustSwitchChain(56, rpcUrl = "https://bsc-dataseed4.ninicoin.io") { result ->
+            println("✅ BSC switch result: $result")
+        }
+        
+        println("✨ Features:")
+        println("• trustSwitchChain() - Switch blockchain networks")
+        println("• trustGetConnectedAddress() - Get current dApp connected address") 
+        println("• Signature request interception for unauthorized domains")
     }
 }

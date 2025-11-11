@@ -41,17 +41,15 @@ class Utils {
 
   // message: Bytes | string
   static messageToBuffer(message) {
-    var buffer = Buffer.from([]);
     try {
       if (typeof message === "string") {
-        buffer = Buffer.from(message.replace("0x", ""), "hex");
+        return Buffer.from(message.replace("0x", ""), "hex");
       } else {
-        buffer = Buffer.from(message);
+        return Buffer.from(message);
       }
     } catch (err) {
-      console.log(`messageToBuffer error: ${err}`);
+      return Buffer.from([]);
     }
-    return buffer;
   }
 
   static bufferToHex(buf) {
