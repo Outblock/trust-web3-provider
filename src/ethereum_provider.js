@@ -120,7 +120,9 @@ class TrustWeb3Provider extends BaseProvider {
    * @deprecated Use request() method instead.
    */
   send(payload) {
-    // Handle legacy send method
+    if (this.isDebug) {
+      console.log(`==> send payload ${JSON.stringify(payload)}`);
+    }
     let response = { jsonrpc: "2.0", id: payload.id };
     switch (payload.method) {
       case "eth_accounts":
@@ -173,7 +175,9 @@ class TrustWeb3Provider extends BaseProvider {
    */
   _request(payload, wrapResult = true) {
     this.idMapping.tryIntifyId(payload);
-    // Process authorization and handle request
+    if (this.isDebug) {
+      console.log(`==> _request payload ${JSON.stringify(payload)}`);
+    }
     this.fillJsonRpcVersion(payload);
     
     // Check authorization for signature methods
@@ -273,6 +277,9 @@ class TrustWeb3Provider extends BaseProvider {
           return this.rpc
             .call(payload)
             .then((response) => {
+              if (this.isDebug) {
+                console.log(`<== rpc response ${JSON.stringify(response)}`);
+              }
               wrapResult ? resolve(response) : resolve(response.result);
             })
             .catch(reject);
@@ -521,7 +528,13 @@ class TrustWeb3Provider extends BaseProvider {
       this.handleAccountRequestSuccess(result[0]);
     }
     
-    // Send response to callback or frame
+    if (this.isDebug) {
+      console.log(
+        `<== sendResponse id: ${id}, result: ${JSON.stringify(
+          result
+        )}, data: ${JSON.stringify(data)}`
+      );
+    }
     if (callback) {
       wrapResult ? callback(null, data) : callback(null, result);
       this.callbacks.delete(id);
