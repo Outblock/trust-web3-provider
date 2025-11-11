@@ -27,7 +27,7 @@ class TrustWeb3Provider extends BaseProvider {
 
     // Domain authorization management
     this.domainAuthorizations = new Map(); // domain -> Set<address>
-    this.loadDomainAuthorizations();
+    this.authorizationsLoaded = false;
 
     // Ethereum address regex pattern: 0x followed by 40 hex characters
     this.ethereumAddressRegex = /^0x[a-fA-F0-9]{40}$/;
@@ -53,20 +53,24 @@ class TrustWeb3Provider extends BaseProvider {
       .map(addr => addr.toLowerCase());
     
     this.addresses = normalizedAddresses;
-    this.address = normalizedAddresses[0] || ""; // Keep first address for backwards compatibility
+    this.address = normalizedAddresses[0] || "";
     this.ready = normalizedAddresses.length > 0;
     
+    this.updateFrameAddresses();
+  }
+
+  updateFrameAddresses() {
     try {
       for (var i = 0; i < window.frames.length; i++) {
         const frame = window.frames[i];
         if (frame.ethereum && frame.ethereum.isTrust) {
-          frame.ethereum.addresses = normalizedAddresses;
-          frame.ethereum.address = this.address; // Backwards compatibility
+          frame.ethereum.addresses = this.addresses;
+          frame.ethereum.address = this.address;
           frame.ethereum.ready = this.ready;
         }
       }
     } catch (error) {
-      console.log(error);
+      // Silently fail - frame access may be blocked
     }
   }
 
@@ -116,9 +120,7 @@ class TrustWeb3Provider extends BaseProvider {
    * @deprecated Use request() method instead.
    */
   send(payload) {
-    if (this.isDebug) {
-      console.log(`==> send payload ${JSON.stringify(payload)}`);
-    }
+    // Handle legacy send method
     let response = { jsonrpc: "2.0", id: payload.id };
     switch (payload.method) {
       case "eth_accounts":
@@ -171,9 +173,7 @@ class TrustWeb3Provider extends BaseProvider {
    */
   _request(payload, wrapResult = true) {
     this.idMapping.tryIntifyId(payload);
-    if (this.isDebug) {
-      console.log(`==> _request payload ${JSON.stringify(payload)}`);
-    }
+    // Process authorization and handle request
     this.fillJsonRpcVersion(payload);
     
     // Check authorization for signature methods
@@ -188,14 +188,10 @@ class TrustWeb3Provider extends BaseProvider {
         const connectedAccounts = this.eth_accounts();
         
         if (!connectedAccounts || connectedAccounts.length === 0) {
-          const error = new ProviderRpcError(
+          return Promise.reject(new ProviderRpcError(
             4100, 
             `Unauthorized: Domain ${domain} has not been granted permission to access accounts. Please connect your wallet first.`
-          );
-          if (this.isDebug) {
-            console.error(`❌ Rejected ${payload.method}: no connected accounts`);
-          }
-          return Promise.reject(error);
+          ));
         }
         
         // For signature methods, check if the specific address being used is authorized
@@ -206,14 +202,10 @@ class TrustWeb3Provider extends BaseProvider {
           );
           
           if (!isAuthorized) {
-            const error = new ProviderRpcError(
+            return Promise.reject(new ProviderRpcError(
               4100, 
               `Unauthorized: Address ${requestedAddress} is not authorized for domain ${domain}. Connected accounts: ${connectedAccounts.join(', ')}`
-            );
-            if (this.isDebug) {
-              console.error(`❌ Rejected ${payload.method}: address ${requestedAddress} not authorized`);
-            }
-            return Promise.reject(error);
+            ));
           }
         }
       }
@@ -281,9 +273,6 @@ class TrustWeb3Provider extends BaseProvider {
           return this.rpc
             .call(payload)
             .then((response) => {
-              if (this.isDebug) {
-                console.log(`<== rpc response ${JSON.stringify(response)}`);
-              }
               wrapResult ? resolve(response) : resolve(response.result);
             })
             .catch(reject);
@@ -314,37 +303,23 @@ class TrustWeb3Provider extends BaseProvider {
       return [this.address]; // Return only the current selected address in test
     }
     
+    // Ensure authorizations are loaded before checking
+    this.ensureAuthorizationsLoaded();
+    
     const domain = this.getCurrentDomain();
     const authorizedAddresses = this.domainAuthorizations.get(domain);
     
-    if (!authorizedAddresses) {
-      return [];
-    }
+    if (!authorizedAddresses) return [];
     
     // Find the first authorized address from our injected addresses
     for (const address of this.addresses) {
       if (authorizedAddresses.has(address.toLowerCase())) {
-        // Auto-switch to the authorized address
         const oldAddress = this.address;
         this.address = address.toLowerCase();
         
         // Update iframe references if address changed
         if (oldAddress !== this.address) {
-          try {
-            for (var i = 0; i < window.frames.length; i++) {
-              const frame = window.frames[i];
-              if (frame.ethereum && frame.ethereum.isTrust) {
-                frame.ethereum.address = this.address;
-                frame.ethereum.addresses = this.addresses;
-              }
-            }
-          } catch (error) {
-            console.log(error);
-          }
-          
-          if (this.isDebug) {
-            console.log(`Auto-switched from ${oldAddress} to ${this.address} for domain ${domain}`);
-          }
+          this.updateFrameAddresses();
         }
         
         return [this.address];
@@ -440,13 +415,9 @@ class TrustWeb3Provider extends BaseProvider {
 
 
     if (!chainId || Number(chainId) !== Number(this.chainId)) {
-      const error = new Error(
+      throw new Error(
         `Provided chainId (${chainId}) does not match the currently active chain (${this.chainId})`
       );
-      if (this.isDebug) {
-        console.error(`❌ chainId mismatch: ${chainId} !== ${this.chainId}`);
-      }
-      throw error;
     }
 
     let hash;
@@ -456,11 +427,6 @@ class TrustWeb3Provider extends BaseProvider {
           ? TypedDataUtils.eip712Hash(message, version)
           : "";
     } catch (error) {
-      if (this.isDebug) {
-        console.error("Error in TypedDataUtils.eip712Hash:", error);
-        console.error("Message:", JSON.stringify(message, null, 2));
-        console.error("Version:", version);
-      }
       // For test environment, just return a mock hash
       if (typeof global !== "undefined" && global.process && global.process.env && global.process.env.NODE_ENV === "test") {
         hash = Buffer.from("mock_hash_for_testing_purposes_only", "utf8");
@@ -511,32 +477,11 @@ class TrustWeb3Provider extends BaseProvider {
     // Check if params specify what permissions to revoke
     const params = payload.params && payload.params[0];
     
-    if (params && params.eth_accounts === false) {
-      // Revoke eth_accounts permission for current domain
-      this.revokeAllPermissionsForDomain(domain);
-      
-      // Emit accountsChanged with empty array to notify dApp
-      this.emit("accountsChanged", []);
-      
-      if (this.isDebug) {
-        console.log(`Revoked eth_accounts permission for domain: ${domain}`);
-      }
-      
-      // Return success response
-      return this.sendResponse(payload.id, null);
-    } else {
-      // If no specific permissions specified, revoke all permissions for domain
-      this.revokeAllPermissionsForDomain(domain);
-      
-      // Emit accountsChanged with empty array
-      this.emit("accountsChanged", []);
-      
-      if (this.isDebug) {
-        console.log(`Revoked all permissions for domain: ${domain}`);
-      }
-      
-      return this.sendResponse(payload.id, null);
-    }
+    // Always revoke all permissions for domain
+    this.revokeAllPermissionsForDomain(domain);
+    this.emit("accountsChanged", []);
+    
+    return this.sendResponse(payload.id, null);
   }
 
   /**
@@ -576,13 +521,7 @@ class TrustWeb3Provider extends BaseProvider {
       this.handleAccountRequestSuccess(result[0]);
     }
     
-    if (this.isDebug) {
-      console.log(
-        `<== sendResponse id: ${id}, result: ${JSON.stringify(
-          result
-        )}, data: ${JSON.stringify(data)}`
-      );
-    }
+    // Send response to callback or frame
     if (callback) {
       wrapResult ? callback(null, data) : callback(null, result);
       this.callbacks.delete(id);
@@ -619,12 +558,7 @@ class TrustWeb3Provider extends BaseProvider {
    * Authorize address for a specific domain
    */
   authorizeAddressForDomain(address, domain = this.getCurrentDomain()) {
-    if (!this.isValidEthereumAddress(address)) {
-      if (this.isDebug) {
-        console.warn(`Invalid Ethereum address for authorization: ${address}`);
-      }
-      return;
-    }
+    if (!this.isValidEthereumAddress(address)) return;
     
     if (!this.domainAuthorizations.has(domain)) {
       this.domainAuthorizations.set(domain, new Set());
@@ -654,10 +588,6 @@ class TrustWeb3Provider extends BaseProvider {
     if (this.domainAuthorizations.has(domain)) {
       this.domainAuthorizations.delete(domain);
       this.saveDomainAuthorizations();
-      
-      if (this.isDebug) {
-        console.log(`Removed all authorizations for domain: ${domain}`);
-      }
     }
   }
 
@@ -678,19 +608,55 @@ class TrustWeb3Provider extends BaseProvider {
   }
 
   /**
+   * Safe localStorage wrapper
+   */
+  safeLocalStorage(action, key, value = null) {
+    try {
+      if (typeof localStorage === 'undefined') return action === 'get' ? null : false;
+      
+      if (action === 'get') {
+        return localStorage.getItem(key);
+      } else if (action === 'set') {
+        localStorage.setItem(key, value);
+        return true;
+      }
+    } catch (e) {
+      return action === 'get' ? null : false;
+    }
+  }
+
+  /**
    * Save domain authorizations to localStorage
    */
   saveDomainAuthorizations() {
-    try {
-      const serializable = {};
-      this.domainAuthorizations.forEach((addresses, domain) => {
-        serializable[domain] = Array.from(addresses);
-      });
-      localStorage.setItem("trustwallet_domain_authorizations", JSON.stringify(serializable));
-    } catch (e) {
-      if (this.isDebug) {
-        console.log("Failed to save domain authorizations:", e);
-      }
+    const serializable = {};
+    this.domainAuthorizations.forEach((addresses, domain) => {
+      serializable[domain] = Array.from(addresses);
+    });
+    this.safeLocalStorage('set', "trustwallet_domain_authorizations", JSON.stringify(serializable));
+  }
+
+  /**
+   * Load domain authorizations from localStorage (lazy loading)
+   */
+  ensureAuthorizationsLoaded() {
+    if (this.authorizationsLoaded) {
+      return;
+    }
+    
+    this.authorizationsLoaded = true;
+    
+    // If we're at document start, wait for DOM to be ready
+    if (document.readyState === 'loading') {
+      // DOM is still loading, wait for it
+      const loadAuthorizations = () => {
+        document.removeEventListener('DOMContentLoaded', loadAuthorizations);
+        this.loadDomainAuthorizations();
+      };
+      document.addEventListener('DOMContentLoaded', loadAuthorizations);
+    } else {
+      // DOM is ready, load immediately
+      this.loadDomainAuthorizations();
     }
   }
 
@@ -698,17 +664,15 @@ class TrustWeb3Provider extends BaseProvider {
    * Load domain authorizations from localStorage
    */
   loadDomainAuthorizations() {
-    try {
-      const saved = localStorage.getItem("trustwallet_domain_authorizations");
-      if (saved) {
+    const saved = this.safeLocalStorage('get', "trustwallet_domain_authorizations");
+    if (saved) {
+      try {
         const data = JSON.parse(saved);
         Object.entries(data).forEach(([domain, addresses]) => {
           this.domainAuthorizations.set(domain, new Set(addresses));
         });
-      }
-    } catch (e) {
-      if (this.isDebug) {
-        console.log("Failed to load domain authorizations:", e);
+      } catch (e) {
+        // Silently fail - corrupted data will be overwritten
       }
     }
   }
@@ -744,9 +708,11 @@ class TrustWeb3Provider extends BaseProvider {
       return this.address || "";
     }
     
+    // Ensure authorizations are loaded before checking
+    this.ensureAuthorizationsLoaded();
+    
     const domain = this.getCurrentDomain();
     const authorizedAddresses = this.domainAuthorizations.get(domain);
-    
     
     if (!authorizedAddresses || authorizedAddresses.size === 0) {
       return "";
@@ -758,7 +724,6 @@ class TrustWeb3Provider extends BaseProvider {
         return address.toLowerCase();
       }
     }
-    
     
     return "";
   }
@@ -857,9 +822,7 @@ class TrustWeb3Provider extends BaseProvider {
     // Emit chainChanged event
     this.emitChainChanged(this.chainId);
     
-    if (this.isDebug) {
-      console.log(`Network switched from ${oldChainId} (${oldNetworkVersion}) to ${this.chainId} (${this.networkVersion})`);
-    }
+    // Network switched successfully
   }
 
   /**
@@ -876,7 +839,7 @@ class TrustWeb3Provider extends BaseProvider {
     // Note: Address switching is no longer supported at runtime
     // Addresses must be configured at initialization time
     
-    if (chainId !== undefined && chainId !== parseInt(this.networkVersion)) {
+    if (chainId && chainId !== parseInt(this.networkVersion)) {
       this.switchNetwork(chainId, rpcUrl);
     }
   }
@@ -886,14 +849,7 @@ class TrustWeb3Provider extends BaseProvider {
    */
   handleAccountRequestSuccess(address) {
     if (address && this.isValidEthereumAddress(address)) {
-      // Authorize the address for the current domain
       this.authorizeAddressForDomain(address);
-      
-      if (this.isDebug) {
-        console.log(`Address ${address} authorized for domain ${this.getCurrentDomain()}`);
-      }
-    } else if (address && this.isDebug) {
-      console.warn(`Invalid Ethereum address in account request: ${address}`);
     }
   }
 }
