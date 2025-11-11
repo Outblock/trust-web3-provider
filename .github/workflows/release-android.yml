@@ -49,7 +49,7 @@ jobs:
         TAG_NAME: ${{ steps.version.outputs.version }}
 
     - name: Build Javadoc and Sources
-      run: ./gradlew :lib:javaDocReleaseJar :lib:sourceReleaseJar
+      run: ./gradlew :lib:releaseSourcesJar :lib:javaDocReleaseJar
       working-directory: android
       env:
         TAG_NAME: ${{ steps.version.outputs.version }}
@@ -62,7 +62,7 @@ jobs:
         GPR_API_KEY: ${{ secrets.GITHUB_TOKEN }}
         TAG_NAME: ${{ steps.version.outputs.version }}
 
-    - name: Upload AAR to Release Assets
+    - name: Upload Release Assets
       uses: actions/upload-release-asset@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -78,7 +78,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ github.event.release.upload_url }}
-        asset_path: android/lib/build/libs/web3-provider-${{ steps.version.outputs.version }}-sources.jar
+        asset_path: android/lib/build/libs/web3-provider-sources.jar
         asset_name: web3-provider-${{ steps.version.outputs.version }}-sources.jar
         asset_content_type: application/java-archive
 
@@ -88,7 +88,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ github.event.release.upload_url }}
-        asset_path: android/lib/build/libs/web3-provider-${{ steps.version.outputs.version }}-javadoc.jar
+        asset_path: android/lib/build/intermediates/java_doc_jar/release/release-javadoc.jar
         asset_name: web3-provider-${{ steps.version.outputs.version }}-javadoc.jar
         asset_content_type: application/java-archive
 

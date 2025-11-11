@@ -49,4 +49,24 @@ extension WKWebView {
             }
         }
     }
+
+    /**
+     * Get current connected address for the dApp
+     * This returns the actual address that the current domain is connected to
+     * @param completion: Completion handler with the connected address (empty string if not connected)
+     */
+    public func trustGetConnectedAddress(completion: @escaping (String) -> Void) {
+        let jsCommand = "window.ethereum.getCurrentConnectedAddress()"
+        
+        evaluateJavaScript(jsCommand) { result, error in
+            if let error = error {
+                print("Trust get connected address error: \(error)")
+                completion("")
+            } else if let address = result as? String {
+                completion(address)
+            } else {
+                completion("")
+            }
+        }
+    }
 }
